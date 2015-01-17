@@ -2207,7 +2207,7 @@ class BaseModelResource(Resource):
         self.authorized_delete_detail(self.get_object_list(bundle.request), bundle)
         bundle.obj.delete()
 
-    @transaction.commit_on_success()
+    @transaction.atomic()
     def patch_list(self, request, **kwargs):
         """
         An ORM-specific implementation of ``patch_list``.
@@ -2229,7 +2229,7 @@ class BaseModelResource(Resource):
                 bundle.obj.delete()
 
     def create_identifier(self, obj):
-        return u"%s.%s.%s" % (obj._meta.app_label, obj._meta.module_name, obj.pk)
+        return u"%s.%s.%s" % (obj._meta.app_label, obj._meta.model_name, obj.pk)
 
     def save(self, bundle, skip_errors=False):
         self.is_valid(bundle)
