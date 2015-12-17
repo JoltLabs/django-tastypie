@@ -34,8 +34,8 @@ Requirements
 Core
 ----
 
-* Python 2.6+ or Python 3.3+
-* Django 1.5 through Django 1.8
+* Python 2.7+ or Python 3.4+
+* Django 1.7 through Django 1.9
 * dateutil (http://labix.org/python-dateutil) >= 2.1
 
 Format Support
@@ -71,17 +71,17 @@ A basic example looks like:
 
     # urls.py
     # =======
-    from django.conf.urls.defaults import *
+    from django.conf.urls.defaults import url, include
     from tastypie.api import Api
     from myapp.api import EntryResource
 
     v1_api = Api(api_name='v1')
     v1_api.register(EntryResource())
 
-    urlpatterns = patterns('',
+    urlpatterns = [
         # The normal jazz here then...
-        (r'^api/', include(v1_api.urls)),
-    )
+        url(r'^api/', include(v1_api.urls)),
+    ]
 
 That gets you a fully working, read-write API for the ``Entry`` model that
 supports all CRUD operations in a RESTful way. JSON/XML/YAML support is already
