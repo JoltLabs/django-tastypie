@@ -605,7 +605,7 @@ class RelatedField(ApiField):
                 via_uri=True
             )
             return fk_resource.full_dehydrate(bundle)
-        except ObjectDoesNotExist:
+        except (ObjectDoesNotExist, NotFound):
             raise ApiFieldError(err_msg)
 
     def resource_from_data(self, fk_resource, data, request=None, related_obj=None, related_name=None):
