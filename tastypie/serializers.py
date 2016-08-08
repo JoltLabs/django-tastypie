@@ -11,7 +11,8 @@ from django.utils.encoding import force_text, smart_bytes
 from django.core.serializers import json as djangojson
 
 from tastypie.bundle import Bundle
-from tastypie.exceptions import BadRequest, UnsupportedFormat
+from tastypie.exceptions import BadRequest, UnsupportedSerializationFormat,\
+    UnsupportedDeserializationFormat
 from tastypie.utils import format_datetime, format_date, format_time,\
     make_naive
 
@@ -69,6 +70,17 @@ if yaml is not None:
             Resolver.__init__(self)
 
 
+def _get_default_formats():
+    formats = ['json']
+    if lxml:
+        formats.append('xml')
+    if yaml:
+        formats.append('yaml')
+    if biplist:
+        formats.append('plist')
+    return formats
+
+
 _NUM = 0
 _DICT = 1
 _LIST = 2
@@ -114,7 +126,7 @@ class Serializer(object):
     ``formats/content_types`` options or by altering the other hook methods.
     """
 
-    formats = ['json', 'xml', 'yaml', 'plist']
+    formats = _get_default_formats()
 
     content_types = {
         'json': 'application/json',
@@ -155,7 +167,7 @@ class Serializer(object):
                 raise ImproperlyConfigured("Content type for specified type '%s' not found. Please provide it at either the class level or via the arguments." % format)
 
         # Reverse the list, because mimeparse is weird like that. See also
-        # https://github.com/toastdriven/django-tastypie/issues#issue/12 for
+        # https://github.com/django-tastypie/django-tastypie/issues#issue/12 for
         # more information.
         self.supported_formats_reversed = list(self.supported_formats)
         self.supported_formats_reversed.reverse()
@@ -248,7 +260,7 @@ class Serializer(object):
         method = self._to_methods.get(format)
 
         if method is None:
-            raise UnsupportedFormat("The format indicated '%s' had no available serialization method. Please check your ``formats`` and ``content_types`` on your Serializer." % format)
+            raise UnsupportedSerializationFormat(format)
 
         return method(bundle, options)
 
@@ -264,7 +276,7 @@ class Serializer(object):
         method = self._from_methods.get(format)
 
         if method is None:
-            raise UnsupportedFormat("The format indicated '%s' had no available deserialization method. Please check your ``formats`` and ``content_types`` on your Serializer." % format)
+            raise UnsupportedDeserializationFormat(format)
 
         if isinstance(content, six.binary_type):
             content = force_text(content)
@@ -417,7 +429,7 @@ class Serializer(object):
         try:
             return json.loads(content)
         except ValueError:
-            raise BadRequest
+            raise BadRequest('Request is not valid JSON.')
 
     def to_jsonp(self, data, options=None):
         """

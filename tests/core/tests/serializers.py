@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import datetime
 from decimal import Decimal
+import mock
 from unittest import skipIf
 import yaml
 
@@ -10,7 +11,7 @@ from django.test import TestCase
 from tastypie.bundle import Bundle
 from tastypie import fields
 from tastypie.exceptions import BadRequest
-from tastypie.serializers import Serializer
+from tastypie.serializers import _get_default_formats, Serializer
 from tastypie.resources import ModelResource
 
 from core.models import Note
@@ -48,6 +49,20 @@ class AnotherNoteResource(ModelResource):
         bundle.data['meta'] = {'threat': 'high'}
         bundle.data['owed'] = Decimal('102.57')
         return bundle
+
+
+class GetDefaultFormatsTestCase(TestCase):
+    @mock.patch.multiple('tastypie.serializers', lxml=True, yaml=True, biplist=True)
+    def test_all(self):
+        formats = _get_default_formats()
+
+        self.assertEqual(formats, ['json', 'xml', 'yaml', 'plist'])
+
+    @mock.patch.multiple('tastypie.serializers', lxml=False, yaml=False, biplist=False)
+    def test_json_only(self):
+        formats = _get_default_formats()
+
+        self.assertEqual(formats, ['json'])
 
 
 class SerializerTestCase(TestCase):
@@ -386,10 +401,10 @@ class SerializerTestCase(TestCase):
 
         sample_1 = serializer.from_plist(b'bplist00bybiplist1.0\x00\xd4\x01\x02\x03\x04\x05\x06\x07\x08WsnowmanSageTname[date_joineda&\x03\x10\x1bf\x00D\x00a\x00n\x00i\x00e\x00lZ2010-03-27\x15\x1e&*/;>@M\x00\x00\x00\x00\x00\x00\x01\x01\x00\x00\x00\x00\x00\x00\x00\t\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00X')
         self.assertEqual(len(sample_1), 4)
-        self.assertEqual(sample_1[b'name'], 'Daniel')
-        self.assertEqual(sample_1[b'age'], 27)
-        self.assertEqual(sample_1[b'date_joined'], b'2010-03-27')
-        self.assertEqual(sample_1[b'snowman'], u'☃')
+        self.assertEqual(sample_1['name'], 'Daniel')
+        self.assertEqual(sample_1['age'], 27)
+        self.assertEqual(sample_1['date_joined'], '2010-03-27')
+        self.assertEqual(sample_1['snowman'], u'☃')
 
 
 class ResourceSerializationTestCase(TestCase):

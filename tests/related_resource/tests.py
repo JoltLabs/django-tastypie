@@ -6,6 +6,7 @@ from django.contrib.auth.models import User
 from django.core.urlresolvers import reverse
 from django.db.models.signals import pre_save
 from django.test.testcases import TestCase
+from django.test.utils import override_settings
 
 from tastypie import fields
 from tastypie.exceptions import ApiFieldError, NotFound
@@ -13,9 +14,10 @@ from tastypie.exceptions import ApiFieldError, NotFound
 from core.models import Note, MediaBit
 from core.tests.mocks import MockRequest
 
-from related_resource.api.resources import CategoryResource, ForumResource,\
-    FreshNoteResource, JobResource, NoteResource, OrderResource,\
-    NoteWithUpdatableUserResource, PersonResource, TagResource, UserResource
+from related_resource.api.resources import AddressResource, CategoryResource,\
+    ForumResource, FreshNoteResource, JobResource, NoteResource,\
+    OrderResource, NoteWithUpdatableUserResource, PersonResource, TagResource,\
+    UserResource
 from related_resource.api.urls import api
 from related_resource.models import Category, Label, Tag, Taggable,\
     TaggableTag, ExtraData, Company, Person, Dog, DogHouse, Bone, Product,\
@@ -47,9 +49,8 @@ class M2MResourcesTestCase(TestCaseWithFixture):
         self.assertEqual(len(data['members']), 1)
 
 
+@override_settings(ROOT_URLCONF='related_resource.api.urls')
 class RelatedResourceTest(TestCaseWithFixture):
-    urls = 'related_resource.api.urls'
-
     def setUp(self):
         super(RelatedResourceTest, self).setUp()
         self.user = User.objects.create(username="testy_mctesterson")
@@ -120,9 +121,8 @@ class RelatedResourceTest(TestCaseWithFixture):
             resource.post_list(request)
 
 
+@override_settings(ROOT_URLCONF='related_resource.api.urls')
 class CategoryResourceTest(TestCaseWithFixture):
-    urls = 'related_resource.api.urls'
-
     def setUp(self):
         super(CategoryResourceTest, self).setUp()
         self.parent_cat_1 = Category.objects.create(parent=None, name='Dad')
@@ -167,9 +167,8 @@ class CategoryResourceTest(TestCaseWithFixture):
         self.assertEqual(Category.objects.get(pk=self.child_cat_1.pk).parent, None)
 
 
+@override_settings(ROOT_URLCONF='related_resource.api.urls')
 class ExplicitM2MResourceRegressionTest(TestCaseWithFixture):
-    urls = 'related_resource.api.urls'
-
     def setUp(self):
         super(ExplicitM2MResourceRegressionTest, self).setUp()
         self.tag_1 = Tag.objects.create(name='important')
@@ -233,9 +232,8 @@ class ExplicitM2MResourceRegressionTest(TestCaseWithFixture):
         self.assertEqual(deserialized['name'], 'school')
 
 
+@override_settings(ROOT_URLCONF='related_resource.api.urls')
 class OneToManySetupTestCase(TestCaseWithFixture):
-    urls = 'related_resource.api.urls'
-
     def test_one_to_many(self):
         # Sanity checks.
         self.assertEqual(Note.objects.count(), 2)
@@ -315,9 +313,8 @@ class RelationshipOppositeFromModelTestCase(TestCaseWithFixture):
         self.assertEqual(new_job, new_payment.job)
 
 
+@override_settings(ROOT_URLCONF='related_resource.api.urls')
 class RelatedPatchTestCase(TestCaseWithFixture):
-    urls = 'related_resource.api.urls'
-
     def test_patch_to_one(self):
         resource = FullCategoryResource()
         cat1 = Category.objects.create(name='Dad')
@@ -415,9 +412,8 @@ class RelatedPatchTestCase(TestCaseWithFixture):
         self.assertEqual(user2.password, 'this_is_not_a_valid_password_string')
 
 
+@override_settings(ROOT_URLCONF='related_resource.api.urls')
 class NestedRelatedResourceTest(TestCaseWithFixture):
-    urls = 'related_resource.api.urls'
-
     def test_one_to_one(self):
         """
         Test a related ToOne resource with a nested full ToOne resource
@@ -755,9 +751,8 @@ class NestedRelatedResourceTest(TestCaseWithFixture):
         self.assertEqual(bone.color, 'gray')
 
 
+@override_settings(ROOT_URLCONF='related_resource.api.urls')
 class RelatedSaveCallsTest(TestCaseWithFixture):
-    urls = 'related_resource.api.urls'
-
     def test_one_query_for_post_list(self):
         """
         Posting a new detail with no related objects
@@ -959,13 +954,12 @@ class RelatedSaveCallsTest(TestCaseWithFixture):
         self.assertEqual(list(new_cg2.members.all()), [new_c2])
 
 
+@override_settings(ROOT_URLCONF='related_resource.api.urls')
 class CorrectUriRelationsTestCase(TestCaseWithFixture):
     """
     Validate that incorrect URI (with PKs that line up to valid data) are not
     accepted.
     """
-    urls = 'related_resource.api.urls'
-
     def test_incorrect_uri(self):
         self.assertEqual(Note.objects.count(), 2)
         nr = NoteResource()
@@ -1003,44 +997,76 @@ class CorrectUriRelationsTestCase(TestCaseWithFixture):
         self.assertEqual(Note.objects.count(), 2)
 
 
-class TestPutOnRelatedResource(TestCase):
-    def test_m2m_put_prefetch(self):
-        resource = api.canonical_resource_for('forum')
+class PrefetchRelatedTests(TestCase):
+    def setUp(self):
+        self.forum = Forum.objects.create()
+        self.resource = api.canonical_resource_for('forum')
+
+        self.user_data = [
+            {
+                'username': 'valid but unique',
+                'email': 'valid.unique@exmaple.com',
+                'password': 'junk',
+            },
+            {
+                'username': 'valid and very unique',
+                'email': 'valid.very.unique@exmaple.com',
+                'password': 'junk',
+            },
+            {
+                'username': 'valid again',
+                'email': 'valid.very.unique@exmaple.com',
+                'password': 'junk',
+            },
+        ]
+
+    def tearDown(self):
+        usernames = [data['username'] for data in self.user_data]
+        User.objects.filter(username__in=usernames).delete()
+        self.forum.delete()
+
+    def make_request(self, method):
         request = MockRequest()
         request.GET = {'format': 'json'}
-        request.method = 'PUT'
-        forum = Forum.objects.create()
-        user_data_1 = {
-            'username': 'valid but unique',
-            'email': 'valid.unique@exmaple.com',
-            'password': 'junk',
-        }
-        user_data_2 = {
-            'username': 'valid and very unique',
-            'email': 'valid.very.unique@exmaple.com',
-            'password': 'junk',
-        }
-        user_data_3 = {
-            'username': 'valid again',
-            'email': 'valid.very.unique@exmaple.com',
-            'password': 'junk',
-        }
-
-        forum_data = {'members': [user_data_1, user_data_2, ],
-                      'moderators': [user_data_3, ]}
-        request.set_body(json.dumps(forum_data))
-
+        request.method = method
+        request.set_body(json.dumps({
+            'members': [
+                self.user_data[0],
+                self.user_data[1],
+            ],
+            'moderators': [self.user_data[2]],
+        }))
         request.path = reverse('api_dispatch_detail', kwargs={
-            'pk': forum.pk,
-            'resource_name': resource._meta.resource_name,
-            'api_name': resource._meta.api_name
+            'pk': self.forum.pk,
+            'resource_name': self.resource._meta.resource_name,
+            'api_name': self.resource._meta.api_name
         })
 
-        response = resource.put_detail(request)
+        return request
+
+    def test_m2m_put(self):
+        request = self.make_request('PUT')
+        response = self.resource.put_detail(request)
+
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content.decode('utf-8'))
 
-        # Check that the query does what it's supposed to and only the return value is wrong
+        # Check that the query does what it's supposed to
+        # and only the return value is wrong
+        self.assertEqual(User.objects.count(), 3)
+
+        self.assertEqual(len(data['members']), 2)
+        self.assertEqual(len(data['moderators']), 1)
+
+    def test_m2m_patch(self):
+        request = self.make_request('PATCH')
+        response = self.resource.patch_detail(request)
+
+        self.assertEqual(response.status_code, 202)
+        data = json.loads(response.content.decode('utf-8'))
+
+        # Check that the query does what it's supposed to
+        # and only the return value is wrong
         self.assertEqual(User.objects.count(), 3)
 
         self.assertEqual(len(data['members']), 2)
@@ -1097,3 +1123,36 @@ class OneToOneTestCase(TestCase):
 
         tag = Tag.objects.get(pk=int(resp['Location'].split("/")[-2]))
         self.assertEqual(tag.extradata, ed)
+
+    @staticmethod
+    def patch_details(resource, pk, **kwargs):
+        # Post the extradata element which is attached to a "reverse" OneToOne
+        request = MockRequest()
+        request.method = "PATCH"
+        request.body = json.dumps(kwargs)
+        response = resource.patch_detail(request, pk=pk)
+        return response
+
+    def test_one_to_one_two_patches_in_a_row(self):
+        resource = TagResource()
+        ed = ExtraData.objects.create(name='ed_name')
+        tag = Tag.objects.create(name='tag_name')
+        tag2 = Tag.objects.create(name="tag_name2")
+        extra_data = "/v1/extradata/%s/" % ed.pk
+
+        self.patch_details(resource, tag.pk, extradata=extra_data)
+        resp = self.patch_details(resource, tag2.pk, name="new_tag_name")
+
+        self.assertEqual(resp.status_code, 202)
+        self.assertEqual(Tag.objects.get(pk=tag2.pk).name, "new_tag_name")
+
+    def test_toonefield_spanning_a_relationship(self):
+        """
+        #1446
+        """
+        # just need to be able to add this to a class
+        class CustomPersonResource(PersonResource):
+            company_address = fields.ToOneField(AddressResource,
+                'company__address', null=True, full=True)
+        resource = CustomPersonResource()
+        resource.fields['company_address']

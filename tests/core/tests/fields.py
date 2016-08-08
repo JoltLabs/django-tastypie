@@ -12,7 +12,7 @@ from tastypie.exceptions import ApiFieldError, NotFound
 from tastypie.fields import NOT_PROVIDED, ApiField, BooleanField, CharField,\
     DateField, DateTimeField, DecimalField, DictField, FileField, FloatField,\
     IntegerField, ListField, TimeField, ToOneField, ToManyField
-from tastypie.resources import ModelResource
+from tastypie.resources import ALL, ModelResource
 from tastypie.utils import aware_datetime
 
 from core.models import Note, Subject, MediaBit
@@ -46,7 +46,8 @@ class ApiFieldTestCase(TestCase):
         field_4 = ApiField(use_in="detail")
         self.assertEqual(field_4.use_in, 'detail')
 
-        use_in_callable = lambda x: True
+        def use_in_callable(x):
+            return True
         field_5 = ApiField(use_in=use_in_callable)
         self.assertTrue(field_5.use_in is use_in_callable)
 
@@ -567,9 +568,13 @@ class DateTimeFieldTestCase(TestCase):
         field_2 = DateTimeField(default=aware_datetime(2010, 4, 1, 1, 7))
         self.assertEqual(field_2.dehydrate(bundle), aware_datetime(2010, 4, 1, 1, 7))
 
-        note.created_string = '2010-04-02 01:11:00'
         field_3 = DateTimeField(attribute='created_string')
-        self.assertEqual(field_3.dehydrate(bundle), aware_datetime(2010, 4, 2, 1, 11))
+
+        note.created_string = '2010-04-02T01:11:01'
+        self.assertEqual(field_3.dehydrate(bundle), aware_datetime(2010, 4, 2, 1, 11, 1))
+
+        note.created_string = '2010-04-02 01:11:02'
+        self.assertEqual(field_3.dehydrate(bundle), aware_datetime(2010, 4, 2, 1, 11, 2))
 
     def test_hydrate(self):
         bundle_1 = Bundle(data={
@@ -617,6 +622,10 @@ class UserResource(ModelResource):
     class Meta:
         resource_name = 'users'
         queryset = User.objects.all()
+        filtering = {
+            'id': ALL,
+            'username': ALL,
+        }
 
     def get_resource_uri(self, bundle_or_obj=None, url_name='api_dispatch_list'):
         if bundle_or_obj is None:
@@ -677,7 +686,8 @@ class ToOneFieldTestCase(TestCase):
         field_6 = ToOneField(UserResource, 'author', default=1, null=True, readonly=True, help_text="Points to a User.", use_in="detail")
         self.assertEqual(field_6.use_in, 'detail')
 
-        use_in_callable = lambda x: True
+        def use_in_callable(x):
+            return True
         field_7 = ToOneField(UserResource, 'author', default=1, null=True, readonly=True, help_text="Points to a User.", use_in=use_in_callable)
         self.assertTrue(field_7.use_in is use_in_callable)
 
@@ -772,6 +782,12 @@ class ToOneFieldTestCase(TestCase):
         self.assertEqual(field_2.hydrate(bundle), None)
 
         # Wrong resource URI.
+        field_3 = ToOneField(UserResource, 'author')
+        field_3.instance_name = 'fk'
+        bundle.data['fk'] = '/api/v1/users/123/'
+        self.assertRaises(ApiFieldError, field_3.hydrate, bundle)
+
+        # Wrong resource URI pk type.
         field_3 = ToOneField(UserResource, 'author')
         field_3.instance_name = 'fk'
         bundle.data['fk'] = '/api/v1/users/abc/'
@@ -952,7 +968,6 @@ class MediaBitResource(ModelResource):
 
 class ToManyFieldTestCase(TestCase):
     fixtures = ['note_testdata.json']
-    urls = 'core.tests.field_urls'
 
     def setUp(self):
         self.note_1 = Note.objects.get(pk=1)
@@ -1026,7 +1041,8 @@ class ToManyFieldTestCase(TestCase):
         field_6 = ToManyField(SubjectResource, 'author', default=1, null=True, readonly=True, help_text="Points to a User.", use_in="detail")
         self.assertEqual(field_6.use_in, 'detail')
 
-        use_in_callable = lambda x: True
+        def use_in_callable(x):
+            return True
         field_7 = ToManyField(SubjectResource, 'author', default=1, null=True, readonly=True, help_text="Points to a User.", use_in=use_in_callable)
         self.assertTrue(field_7.use_in is use_in_callable)
 
@@ -1265,6 +1281,12 @@ class ToManyFieldTestCase(TestCase):
         self.assertEqual(field_3.hydrate_m2m(bundle_3), [])
 
         # Wrong resource URI.
+        field_4 = ToManyField(SubjectResource, 'subjects')
+        field_4.instance_name = 'm2m'
+        bundle_4 = Bundle(data={'m2m': ['/api/v1/subjects/123/']})
+        self.assertRaises(ApiFieldError, field_4.hydrate_m2m, bundle_4)
+
+        # Wrong resource URI pk type.
         field_4 = ToManyField(SubjectResource, 'subjects')
         field_4.instance_name = 'm2m'
         bundle_4 = Bundle(data={'m2m': ['/api/v1/subjects/abc/']})
